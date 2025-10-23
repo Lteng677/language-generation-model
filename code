@@ -1,0 +1,146 @@
+!pip install transformers torch diffusers
+
+from transformers import pipeline, set_seed
+from diffusers import StableDiffusionPipeline
+import torch
+
+print(" 语言模型实验 - 文本与图像生成")
+
+# 初始化模型
+print("正在加载模型...")
+text_generator = pipeline("text-generation", model="gpt2")
+qa_model = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+set_seed(42)
+
+# 图像生成模型
+try:
+    image_generator = StableDiffusionPipeline.from_pretrained(
+        "runwayml/stable-diffusion-v1-5",
+        torch_dtype=torch.float16,
+        use_safetensors=True
+    )
+    if torch.cuda.is_available():
+        image_generator = image_generator.to("cuda")
+    image_available = True
+    print(" 图像模型加载成功")
+except Exception as e:
+    print(f" 图像模型加载失败: {e}")
+    image_available = False
+
+def simple_text_demo():
+    """简单文本生成演示"""
+    print("\n=== 简单文本生成 ===")
+    prompts = [
+        "人工智能可以",
+        "未来的城市将",
+        "机器学习技术"
+    ]
+    
+    for prompt in prompts:
+        print(f"\n输入: '{prompt}'")
+        results = text_generator(prompt, max_length=50, num_return_sequences=1)
+        print(f"输出: {results[0]['generated_text']}")
+
+def interactive_text():
+    """互动文本生成"""
+    print("\n=== 互动文本生成 ===")
+    
+    while True:
+        prompt = input("\n输入文本开头 (输入 quit 退出): ")
+        if prompt.lower() == "quit":
+            break
+            
+        length = input(" 文本长度 (默认80): ")
+        length = int(length) if length.isdigit() else 80
+
+        num_samples = input(" 生成数量 (1-3, 默认1): ")
+        num_samples = int(num_samples) if num_samples.isdigit() and 1 <= int(num_samples) <= 3 else 1
+        
+        print("\n 生成中...")
+        results = text_generator(
+            prompt, 
+            max_length=length, 
+            num_return_sequences=num_samples, 
+            temperature=0.7, 
+            do_sample=True
+        )
+        
+        for i, result in enumerate(results):
+            print(f"\n样本 {i + 1}:")
+            print(result["generated_text"])
+
+def interactive_qa():
+    """互动问答"""
+    print("\n=== 互动问答 ===")
+    
+    context = """
+    近年来，人工智能技术的快速发展正在深刻改变人类社会的各个方面。从自动驾驶到语音识别，
+    再到智能推荐系统，AI的应用已经渗透到人们的日常生活之中。与此同时，数据隐私与算法公平性
+    等问题也引发了广泛讨论。如何在创新与监管之间取得平衡，成为全球科技治理的重要议题。
+    """
+    
+    print("\n 背景信息:")
+    print(context)
+    
+    while True:
+        question = input("\n 输入问题 (输入 quit 退出): ")
+        if question.lower() == 'quit':
+            break
+            
+        result = qa_model(question=question, context=context)
+        print(f"答案: {result['answer']}")
+        print(f"置信度: {result['score']:.4f}")
+
+def image_generation():
+    """文本到图像生成"""
+    if not image_available:
+        print(" 图像生成功能不可用")
+        return
+        
+    print("\n=== 文本到图像生成 ===")
+    
+    while True:
+        prompt = input("\n 输入图像描述 (输入 quit 退出): ")
+        if prompt.lower() == 'quit':
+            break
+            
+        print(" 生成图像中...")
+        try:
+            image = image_generator(prompt).images[0]
+            filename = f"generated_{hash(prompt) % 10000:04d}.png"
+            image.save(filename)
+            print(f" 图像已保存: {filename}")
+        except Exception as e:
+            print(f" 生成失败: {e}")
+
+def main():
+    """主菜单"""
+    while True:
+        print("\n" + "="*40)
+        print("语言模型实验")
+        print("="*40)
+        print("1. 简单文本生成")
+        print("2. 互动文本生成") 
+        print("3. 互动问答")
+        print("4. 图像生成")
+        print("5. 退出")
+        print("="*40)
+        
+        choice = input("请选择 (1-5): ")
+        
+        if choice == '1':
+            simple_text_demo()
+        elif choice == '2':
+            interactive_text()
+        elif choice == '3':
+            interactive_qa()
+        elif choice == '4':
+            image_generation()
+        elif choice == '5':
+            print(" 再见！")
+            break
+        else:
+            print(" 无效选择")
+
+if __name__ == "__main__":
+    main()
